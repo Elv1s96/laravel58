@@ -2,24 +2,38 @@
 
 namespace App\Http\Controllers\Blog\Admin;
 
+use App\Models\BlogPost;
+use App\Repositories\BlogCategoryRepository;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Repositories\BlogPostRepository;
+use App\Http\Requests\BlogPostUpdateRequest;
+use Carbon\Carbon;
+use App\Http\Requests\BlogPostCreateRequest;
 
+
+/**
+ * Управление статьями блога
+ *
+ * @package App\Http\Controllers\Blog\Admin
+ */
 class PostController extends BaseController
 {
     /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
      * @var BlogPostRepository;
      */
     private $blogPostRepository;
-    public function __construct()
+
+    /**
+     * @var BlogCategoryRepository;
+     */
+    private $blogCategoryRepository;
+    public function __construct() // Можно еще написать так BlogPostRepository $blogPostRepository, blogCategoryRepository $blogCategoryRepository
     {
         parent::__construct();
 
         $this->blogPostRepository = app(BlogPostRepository::class);
+        $this->blogCategoryRepository = app(BlogCategoryRepository::class);
     }
 
     public function index()
@@ -35,18 +49,33 @@ class PostController extends BaseController
      */
     public function create()
     {
-        dd(__METHOD__);
+        $item = new BlogPost();
+        $categoryList
+            = $this->blogCategoryRepository->getForComboBox();
+        return view('blog.admin.posts.edit',
+        compact('item', 'categoryList'));
+        //dd(__METHOD__);
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param  BlogPostCreateRequest  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(Request $request)
+    public function store(BlogPostCreateRequest $request)
     {
-        //
+        $data = $request->input();
+        $item = (new BlogPost())->create($data);
+
+        if($item) {
+            return redirect()->route('blog.admin.posts.edit', [$item->id])
+                ->with(['success' => 'Успешно сохранено']);
+        } else {
+            return back()->withErrors(['msg' => 'Ошибка сохранения'])
+                         ->withInput();
+        }
+
     }
 
     /**
@@ -68,19 +97,59 @@ class PostController extends BaseController
      */
     public function edit($id)
     {
-        dd(__METHOD__, $id);
+        $item = $this->blogPostRepository->getEdit($id);
+        if (empty($item)) {
+            abort(404);
+        }
+
+        $categoryList
+            = $this->blogCategoryRepository->getForComboBox();
+        return view('blog.admin.posts.edit',
+        compact('item', 'categoryList'));
+        //dd(__METHOD__, $id);
     }
 
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
+     * @param  BlogPostUpdateRequest $request
+     * @param  int                   $id
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, $id)
+    public function update(BlogPostUpdateRequest $request, $id)
     {
-        dd(__METHOD__,$request->all(), $id);
+        $item = $this->blogPostRepository->getEdit($id);
+        if(empty($item))
+        {
+            return back()
+
+                ->withErrors(['msg' => "Запись id=[{$id}] не найдена "]  )
+                ->withInput();
+            }
+        $data = $request->all();
+        /*
+         *  //Ушло в обсервер
+         */
+//        if(empty($data['slug'])){
+//            $data['slug'] = \Str::slug($data['title']);
+//        }
+//        if(empty($item->published_at) && $data['is_published']){
+//
+//            $data['published_at'] = Carbon::now();
+//        }
+        $result = $item->update($data);
+        if($result) {
+            return redirect()
+                ->route('blog.admin.posts.edit', $item->id)
+                ->with(['success' => 'Успешно сохранено']);
+        }else {
+            return back()
+                ->withErrors(['msg' => 'Ошибка сохранения'])
+                ->withInput();
+        }
+
+
+        //dd(__METHOD__,$request->all(), $id);
     }
 
     /**
@@ -91,6 +160,16 @@ class PostController extends BaseController
      */
     public function destroy($id)
     {
-        dd(__METHOD__, $id, request()->all());
+        //dd(__METHOD__, $id, request()->all());
+        $result = BlogPost::destroy($id);
+//Полное удаление из базы
+        //$result = BlogPost::find($id)->forceDelete();
+        if ($result) {
+            return redirect()
+                ->route('blog.admin.posts.index')
+                ->with(['success' => "Запись id[$id] удалена "]);
+        } else {
+            return back()->withErrors(['msg' => 'Ошибка удаления']);
+        }
     }
 }
